@@ -42,6 +42,7 @@ class BrowserManager:
         self.browser = await self._playwright.chromium.launch(headless=self.headless)
         self.context = await self.browser.new_context(
             viewport={"width": self.viewport_width, "height": self.viewport_height},
+            ignore_https_errors=True,
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                 "Chrome/124.0.0.0 Safari/537.36 DesignAuditAgent/3.0"
@@ -66,7 +67,7 @@ class BrowserManager:
     async def authenticate(self, auth_config: AuthConfig) -> bool:
         try:
             logger.info("auth navigation started", extra={"login_url": auth_config.login_url})
-            await self.page.goto(auth_config.login_url, wait_until="networkidle")
+            await self.page.goto(auth_config.login_url, wait_until="domcontentloaded", timeout=20000)
             await self.page.wait_for_selector(auth_config.username_selector, state="visible")
             await self.page.fill(auth_config.username_selector, auth_config.username)
             await self.page.fill(auth_config.password_selector, auth_config.password)
@@ -81,7 +82,11 @@ class BrowserManager:
     async def navigate_and_capture(self, page_config: PageConfig, output_dir: str) -> dict:
         try:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
-            await self.page.goto(page_config.url, wait_until="networkidle")
+            await self.page.goto(page_config.url, wait_until="domcontentloaded", timeout=20000)
+            try:
+                await self.page.wait_for_load_state("networkidle", timeout=3000)
+            except Exception:
+                logger.info("network idle wait skipped", extra={"page_id": page_config.page_id})
             if self.wait_after_navigation_ms:
                 await self.page.wait_for_timeout(self.wait_after_navigation_ms)
             if page_config.wait_for_selector:

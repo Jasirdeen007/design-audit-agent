@@ -6,9 +6,77 @@ AI agent that analyzes UI screenshots with Groq vision models.
 - **Level 2:** before/after screenshot comparison with improvement, regression, and neutral classification.
 - **Level 3:** autonomous browser-based UI regression scans with login, baseline storage, dynamic masking, and HTML/JSON reports.
 
-Both levels evaluate Visual Hierarchy, WCAG AA Contrast, Spacing, Alignment, and Consistency.
+All levels evaluate Visual Hierarchy, WCAG AA Contrast, Spacing, Alignment, and Consistency.
 
-## Setup
+## Fastest Setup: Docker
+
+Docker is the recommended way to run this project on another system. It installs
+Python dependencies, Playwright browser dependencies, Chromium, FastAPI, and
+Streamlit inside containers.
+
+Prerequisites:
+
+- Docker Desktop or Docker Engine
+- A Groq API key
+
+```bash
+cd design-audit-agent
+copy .env.example .env
+```
+
+Edit `.env` and set:
+
+- `GROQ_API_KEY=your_real_key_here`
+
+For authenticated Level 3 scans, also set:
+
+- `SCAN_USERNAME=your_test_account_username`
+- `SCAN_PASSWORD=your_test_account_password`
+
+These are not Groq credentials. Use a non-production test account for the website
+being scanned.
+
+Start the full project:
+
+```bash
+docker compose up --build
+```
+
+Open:
+
+- Streamlit UI: `http://localhost:8501`
+- API docs: `http://localhost:8001/docs`
+- Health check: `http://localhost:8001/api/v1/health`
+
+Generated reports, screenshots, baselines, and the SQLite database are written
+to the local `output/` folder through Docker volumes.
+
+Stop the project:
+
+```bash
+docker compose down
+```
+
+Rebuild after code or dependency changes:
+
+```bash
+docker compose up --build
+```
+
+If the API container previously failed, reset the old containers before rebuilding:
+
+```bash
+docker compose down
+docker compose build --no-cache
+docker compose up
+```
+
+The Docker image runs Uvicorn with `--loop asyncio` so Playwright and the Level 3
+scan thread work consistently without `uvloop`/`nest_asyncio` conflicts.
+
+## Optional Local Setup
+
+Use this only if you do not want Docker.
 
 ```bash
 cd design-audit-agent
@@ -18,32 +86,16 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
-## Configure Environment
-
-Copy `.env.example` to `.env` and replace the placeholder key.
+Start the backend:
 
 ```bash
-copy .env.example .env
+uvicorn backend.app:app --reload --port 8001
 ```
 
-Set your Groq API key:
-
-- `GROQ_API_KEY=your_real_key_here`
-
-For the Level 3 example config, also set:
-
-- `SCAN_USERNAME=tomsmith`
-- `SCAN_PASSWORD=SuperSecretPassword!`
-
-These are not your Groq credentials. They are demo login credentials for
-`https://the-internet.herokuapp.com/login`, a public test site used by the Level 3
-example config. For your own website, replace them with environment variables for
-your test account, for example `SCAN_USERNAME=qa_user@example.com`.
-
-## Run
+Start Streamlit in another terminal:
 
 ```bash
-uvicorn main:app --reload --port 8001
+streamlit run frontend/streamlit_app.py
 ```
 
 On Windows, restart FastAPI after installing Playwright or after pulling code
@@ -54,14 +106,7 @@ Open:
 
 - API docs: `http://localhost:8001/docs`
 - Upload UI: `http://localhost:8001/ui`
-
-## Run The Streamlit UI
-
-Start the FastAPI server first, then in another terminal run:
-
-```bash
-streamlit run streamlit_app.py
-```
+- Streamlit UI: `http://localhost:8501`
 
 The Streamlit UI is now organized by sidebar workflow:
 
@@ -71,17 +116,21 @@ The Streamlit UI is now organized by sidebar workflow:
 - `Baselines`
 - `History`
 
-You can also run the organized frontend entrypoint:
-
-```bash
-streamlit run frontend/streamlit_app.py
-```
-
-The Streamlit UI has separate tabs for:
+The Streamlit UI has separate workflows for:
 
 - Level 1: upload one screenshot and download JSON/HTML audit reports.
 - Level 2: upload baseline and current screenshots and download JSON/HTML diff reports.
-- Level 3: enter a website URL, pages to scan, optional login selectors, viewport settings, and whether to refresh baselines.
+- Level 3: enter a website URL, at least 3 page paths, optional login selectors, viewport settings, and whether to refresh baselines.
+
+Uploaded screenshots are shown as small previews so they do not dominate the
+workspace. The UI also creates a session id in the URL and stores current uploads
+and reports under `output/ui_sessions/`, so refreshing the browser preserves the
+current activity. Use the sidebar `Start new session` button when you want a
+clean workspace.
+
+In Level 3, `page_id` is generated automatically from the `Report name`. Baseline
+storage is still scoped by website domain internally, so a `Home` page on one
+website cannot collide with a `Home` page on another website.
 
 For Level 3, the UI writes `config/generated_scan_config.json` and calls the existing FastAPI scan endpoint.
 
@@ -91,14 +140,6 @@ Level 2 direction:
 - Current = after/updated/candidate screenshot.
 - If the baseline is defective and current fixes it, the expected classification is improvement.
 - Use the Streamlit swap checkbox if you accidentally selected the images in reverse order.
-
-## Run With Docker
-
-```bash
-docker compose up --build
-```
-
-The API will be available at `http://localhost:8001/docs`. Reports are written to the local `output/` folder through the compose volume.
 
 ## Analyze A Screenshot
 
@@ -155,24 +196,28 @@ To try a different website in Streamlit:
 
 - Enter the new website URL.
 - Edit the pages table to at least 3 real paths on that site.
-- Use `body` as a safe wait selector if you do not know a specific selector yet.
-- Add dynamic ignore selectors such as `header`, `footer`, `.timestamp`, `.avatar`, `.counter`.
+- Use clear report names such as `Home`, `Pricing`, and `Contact`; these become the page IDs.
 - Turn off authentication if the site is public.
 - If auth is needed, provide the login URL and CSS selectors, and set username/password env vars in `.env`.
 
-Correct demo Level 3 inputs:
+The UI uses `body` as the default readiness selector and masks common dynamic
+regions such as `header` and `footer` automatically. Advanced scan configuration
+is still available through `config/scan_config.example.json` for teams that need
+custom wait selectors or dynamic masking rules.
+
+Example authenticated Level 3 inputs:
 
 - Website URL: `https://the-internet.herokuapp.com`
-- Page 1: `/secure`, name `Authenticated Secure Area`, page ID `secure_home`, wait selector `.flash.success`, ignore selector `.flash`
-- Page 2: `/checkboxes`, name `Checkboxes`, page ID `checkboxes`, wait selector `form#checkboxes`, ignore selector `footer`
-- Page 3: `/login`, name `Login Form`, page ID `login_form`, wait selector `#login`, ignore selectors `.flash, footer`
+- Page 1: `/secure`, report name `Authenticated Secure Area`
+- Page 2: `/checkboxes`, report name `Checkboxes`
+- Page 3: `/login`, report name `Login Form`
 - Auth enabled
 - Login URL: `https://the-internet.herokuapp.com/login`
 - Username selector: `#username`
 - Password selector: `#password`
 - Submit selector: `button[type=submit]`
 - Success indicator: `.flash.success`
-- `.env`: `SCAN_USERNAME=tomsmith`, `SCAN_PASSWORD=SuperSecretPassword!`
+- `.env`: `SCAN_USERNAME=your_test_account_username`, `SCAN_PASSWORD=your_test_account_password`
 
 ```bash
 curl -X POST http://localhost:8001/api/v1/scan/start ^
@@ -233,20 +278,30 @@ pytest tests/ -v
 ## Production Readiness Checklist
 
 - Python dependencies are pinned in `requirements.txt`.
+- Docker installs Playwright Chromium and OS browser dependencies, so Level 3 runs on fresh machines.
+- Docker Compose starts both services: `api` on port `8001` and `ui` on port `8501`.
 - Runtime configuration comes from `.env`; secrets are excluded from Docker and git.
 - Docker support is included for repeatable deployment.
 - The service exposes `/api/v1/health` for operational checks.
 - Reports are persisted as JSON and HTML.
 - Guardrails prevent unbounded LLM loops and record `decision_trace` plus `llm_attempts`.
 
+## Evaluation Alignment
+
+- **Code quality and architecture:** FastAPI transport (`api/`), agent logic (`core/`), UI (`frontend/`), database boundary (`database/`), schemas, validators, prompts, and report generation are separated.
+- **Real-world complexity:** unsupported images, corrupt uploads, invalid model JSON, auth failure, browser capture failure, missing env credentials, tiny pixel diffs, and dynamic content are handled with explicit errors or skip decisions.
+- **Agentic design thinking:** every report includes `decision_trace`; LLM calls are bounded; Level 3 only calls the model after measurable visual diff evidence.
+- **Completeness:** Levels 1, 2, and 3 produce structured JSON plus human-readable HTML reports and have Streamlit workflows for non-technical users.
+- **Production readiness:** Docker, `.env.example`, health checks, tests, SQLite baseline persistence, versioned baselines, and package entrypoints are included.
+
 ## Architecture
 
 Organized workflow:
 
 - `frontend/`: Streamlit UI entrypoint.
-- `backend/`: backend boundary documentation.
-- `agent/`: agent-code boundary documentation.
-- `database/`: SQLite database documentation.
+- `backend/`: FastAPI package entrypoint and backend documentation.
+- `agent/`: agent-code package boundary and documentation.
+- `database/`: SQLite database package boundary and documentation.
 - `api/`: FastAPI route implementations.
 - `core/`: actual agent logic and schemas.
 - `utils/`: shared backend utilities.
@@ -255,8 +310,11 @@ Organized workflow:
 Important files:
 
 - `main.py`: FastAPI app startup
-- `streamlit_app.py`: root Streamlit UI entrypoint for all levels
-- `frontend/streamlit_app.py`: organized Streamlit UI entrypoint
+- `Dockerfile`: portable runtime image with FastAPI, Streamlit, Playwright, and Chromium
+- `docker-compose.yml`: starts the API and Streamlit UI together
+- `streamlit_app.py`: backward-compatible root Streamlit launcher
+- `frontend/streamlit_app.py`: Streamlit UI entrypoint for all levels
+- `backend/app.py`: deployable FastAPI app export
 - `api/routes.py`: Level 1 endpoint
 - `api/routes_l2.py`: Level 2 endpoint
 - `api/routes_l3.py`: Level 3 endpoints

@@ -9,7 +9,6 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter
-import nest_asyncio
 from pydantic import BaseModel
 
 from core.baseline_store import BaselineStore, baseline_store
@@ -20,7 +19,6 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 router_l3 = APIRouter()
 _llm_client = None
-nest_asyncio.apply()
 
 
 class ScanStartRequest(BaseModel):

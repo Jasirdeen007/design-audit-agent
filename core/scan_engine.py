@@ -85,17 +85,21 @@ class ScanEngine:
 
     async def scan_page(self, page_config: PageConfig, browser: BrowserManager, refresh_baseline: bool) -> PageScanResult:
         page_start = time.time()
-        page_url = urljoin(self.scan_config.target_url.rstrip("/") + "/", page_config.url)
+        url = page_config.url if page_config.url.startswith("http") else (
+        page_config.url if page_config.url.startswith("/") else "/" + page_config.url)
+        page_url = urljoin(self.scan_config.target_url.rstrip("/") + "/", url)
+        baseline_key = self._baseline_key(page_config.page_id)
         resolved_page = page_config.model_copy(update={"url": page_url})
         trace = [f"page_navigation_started:{page_config.page_id}"]
 
+        baseline = self.baseline_store.get_baseline(baseline_key)
         capture = await browser.navigate_and_capture(resolved_page, self.scan_config.scan_output_dir)
         if not capture.get("success"):
             trace.append(f"page_capture_failed:{page_config.page_id}")
             return PageScanResult(
                 page_id=page_config.page_id,
                 page_url=page_url,
-                baseline_exists=False,
+                baseline_exists=baseline is not None,
                 error=capture.get("error") or "Capture failed",
                 dynamic_regions_filtered=int(capture.get("dynamic_regions_filtered") or 0),
                 pixel_diff_percentage=None,
@@ -104,9 +108,8 @@ class ScanEngine:
             )
 
         screenshot_path = capture["screenshot_path"]
-        baseline = self.baseline_store.get_baseline(page_config.page_id)
         if baseline is None or refresh_baseline:
-            saved_path = self.baseline_store.save_baseline(page_config.page_id, page_url, screenshot_path, self.scan_id)
+            saved_path = self.baseline_store.save_baseline(baseline_key, page_url, screenshot_path, self.scan_id)
             trace.append(f"baseline_refreshed:{page_config.page_id}" if refresh_baseline and baseline else f"baseline_created:{page_config.page_id}")
             return PageScanResult(
                 page_id=page_config.page_id,
@@ -367,3 +370,10 @@ class ScanEngine:
             summary=f"Autonomous scan found {regression_count} regressions, {improvement_count} improvements, and {neutral_count} neutral changes.",
             recommendation="Review regression findings before refreshing the baseline.",
         )
+
+    def _baseline_key(self, page_id: str) -> str:
+        target = self.scan_config.target_url.lower().replace("https://", "").replace("http://", "")
+        target = target.strip("/").replace("www.", "")
+        safe_target = "".join(ch if ch.isalnum() else "_" for ch in target).strip("_")
+        safe_page = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in page_id).strip("_")
+        return f"{safe_target}__{safe_page}"

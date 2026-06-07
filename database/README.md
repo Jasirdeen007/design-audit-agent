@@ -2,6 +2,11 @@
 
 The Level 3 database is SQLite, not an external server.
 
+Code entrypoints:
+
+- `database/baseline_store.py` exports the SQLite `BaselineStore`.
+- `core/baseline_store.py` contains the implementation used by the scan engine.
+
 Default path:
 
 ```text
