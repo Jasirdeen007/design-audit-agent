@@ -1,42 +1,97 @@
-# Design Audit Agent - Levels 1, 2, and 3
+# Design Audit Agent
 
-AI agent that analyzes UI screenshots with Groq vision models.
+Design Audit Agent is an AI-assisted visual quality platform for reviewing UI screenshots, comparing before/after design changes, and running browser-based visual regression scans across live websites.
 
-- **Level 1:** single screenshot design audit.
-- **Level 2:** before/after screenshot comparison with improvement, regression, and neutral classification.
-- **Level 3:** autonomous browser-based UI regression scans with login, baseline storage, dynamic masking, and HTML/JSON reports.
+The project combines FastAPI, Streamlit, Playwright, SQLite baseline storage, and Groq vision models to support three review workflows from one deployable application.
 
-All levels evaluate Visual Hierarchy, WCAG AA Contrast, Spacing, Alignment, and Consistency.
+## Capabilities
 
-## Fastest Setup: Docker
+| Level | Workflow | Purpose |
+| --- | --- | --- |
+| Level 1 | Single Screenshot Audit | Analyze one UI screenshot and return structured design findings. |
+| Level 2 | Before/After Comparison | Compare baseline and current screenshots to classify regressions, improvements, and neutral changes. |
+| Level 3 | Autonomous Website Scan | Visit configured website pages, capture screenshots, maintain baselines, and detect visual regressions. |
 
-Docker is the recommended way to run this project on another system. It installs
-Python dependencies, Playwright browser dependencies, Chromium, FastAPI, and
-Streamlit inside containers.
+All levels evaluate common design quality dimensions including visual hierarchy, WCAG AA contrast, spacing, alignment, and consistency.
 
-Prerequisites:
+## Key Features
+
+- Streamlit review workspace for non-technical users.
+- FastAPI backend with documented REST endpoints.
+- Groq vision model integration for design reasoning.
+- Playwright-powered browser automation for Level 3 scans.
+- Authenticated website scan support through configurable CSS selectors.
+- SQLite baseline database with versioned baseline screenshots.
+- Dynamic DOM masking and image-level filtering to reduce false positives.
+- JSON and HTML report generation for every workflow.
+- Guardrails for file validation, bounded LLM calls, structured model output, and controlled scan execution.
+- Docker Compose setup for repeatable deployment.
+
+## Architecture
+
+```text
+design-audit-agent/
++-- backend/              # FastAPI application export
++-- core/                 # Shared LLM client, report generation, and guardrails
++-- frontend/             # Streamlit application
++-- level1/               # Single screenshot audit workflow
++-- level2/               # Before/after comparison workflow
++-- level3/               # Autonomous scan workflow
++-- utils/                # Shared utilities
++-- config/               # Scan configuration examples and generated config
++-- output/               # Reports, screenshots, baselines, and scan history
++-- docker-compose.yml    # API and UI service orchestration
++-- Dockerfile            # Runtime image with Playwright browser dependencies
++-- main.py               # FastAPI app startup and router registration
+```
+
+### Service Layout
+
+| Service | Technology | Default URL |
+| --- | --- | --- |
+| Streamlit UI | Streamlit | `http://localhost:8501` |
+| API | FastAPI / Uvicorn | `http://localhost:8001` |
+| API Docs | OpenAPI / Swagger | `http://localhost:8001/docs` |
+| Health Check | FastAPI endpoint | `http://localhost:8001/api/v1/health` |
+
+## Prerequisites
+
+Recommended setup:
 
 - Docker Desktop or Docker Engine
-- A Groq API key
+- Groq API key
+
+Optional local setup:
+
+- Python 3.11+
+- Playwright Chromium runtime
+
+## Configuration
+
+Create a local environment file from the provided template:
 
 ```bash
-cd design-audit-agent
 copy .env.example .env
 ```
 
-Edit `.env` and set:
+Set the required Groq key:
 
-- `GROQ_API_KEY=your_real_key_here`
+```env
+GROQ_API_KEY=your_real_groq_api_key
+```
 
-For authenticated Level 3 scans, also set:
+For authenticated Level 3 scans, configure website test credentials:
 
-- `SCAN_USERNAME=your_test_account_username`
-- `SCAN_PASSWORD=your_test_account_password`
+```env
+SCAN_USERNAME=your_test_username
+SCAN_PASSWORD=your_test_password
+```
 
-These are not Groq credentials. Use a non-production test account for the website
-being scanned.
+Use a non-production test account for website scans. These credentials are for the scanned website, not for Groq.
 
-Start the full project:
+## Run With Docker
+
+Docker is the recommended way to run the full application because it installs Python dependencies, Playwright dependencies, Chromium, FastAPI, and Streamlit inside the container image.
 
 ```bash
 docker compose up --build
@@ -48,22 +103,19 @@ Open:
 - API docs: `http://localhost:8001/docs`
 - Health check: `http://localhost:8001/api/v1/health`
 
-Generated reports, screenshots, baselines, and the SQLite database are written
-to the local `output/` folder through Docker volumes.
-
-Stop the project:
+Stop the application:
 
 ```bash
 docker compose down
 ```
 
-Rebuild after code or dependency changes:
+Rebuild after dependency or source changes:
 
 ```bash
 docker compose up --build
 ```
 
-If the API container previously failed, reset the old containers before rebuilding:
+If you need a clean image rebuild:
 
 ```bash
 docker compose down
@@ -71,44 +123,36 @@ docker compose build --no-cache
 docker compose up
 ```
 
-The Docker image runs Uvicorn with `--loop asyncio` so Playwright and the Level 3
-scan thread work consistently without `uvloop`/`nest_asyncio` conflicts.
+Generated reports, screenshots, baselines, and SQLite data are persisted to the local `output/` directory through Docker volumes.
 
-## Optional Local Setup
+## Run Locally Without Docker
 
-Use this only if you do not want Docker.
+Use local setup only when Docker is not available.
 
 ```bash
-cd design-audit-agent
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 playwright install chromium
 ```
 
-Start the backend:
+Start the API:
 
 ```bash
 uvicorn backend.app:app --reload --port 8001
 ```
 
-Start Streamlit in another terminal:
+Start Streamlit in a second terminal:
 
 ```bash
 streamlit run frontend/streamlit_app.py
 ```
 
-On Windows, restart FastAPI after installing Playwright or after pulling code
-changes. Level 3 uses Playwright, which must run with a Windows event loop that
-supports subprocesses; `main.py` sets that policy during startup.
+On Windows, restart FastAPI after installing Playwright or pulling changes that affect browser automation.
 
-Open:
+## Streamlit Workflows
 
-- API docs: `http://localhost:8001/docs`
-- Upload UI: `http://localhost:8001/ui`
-- Streamlit UI: `http://localhost:8501`
-
-The Streamlit UI is now organized by sidebar workflow:
+The Streamlit UI is available at `http://localhost:8501` and provides five sidebar workflows:
 
 - `Level 1 Audit`
 - `Level 2 Compare`
@@ -116,38 +160,37 @@ The Streamlit UI is now organized by sidebar workflow:
 - `Baselines`
 - `History`
 
-The Streamlit UI has separate workflows for:
+The UI creates a browser session ID and stores uploaded files and report state under `output/ui_sessions/`. Use `Start new session` in the sidebar to clear the current workspace.
 
-- Level 1: upload one screenshot and download JSON/HTML audit reports.
-- Level 2: upload baseline and current screenshots and download JSON/HTML diff reports.
-- Level 3: enter a website URL, at least 3 page paths, optional login selectors, viewport settings, and whether to refresh baselines.
+## Level 1: Screenshot Audit
 
-Uploaded screenshots are shown as small previews so they do not dominate the
-workspace. The UI also creates a session id in the URL and stores current uploads
-and reports under `output/ui_sessions/`, so refreshing the browser preserves the
-current activity. Use the sidebar `Start new session` button when you want a
-clean workspace.
+Level 1 accepts a single UI screenshot and returns a structured audit report.
 
-In Level 3, `page_id` is generated automatically from the `Report name`. Baseline
-storage is still scoped by website domain internally, so a `Home` page on one
-website cannot collide with a `Home` page on another website.
+Typical use:
 
-For Level 3, the UI writes `config/generated_scan_config.json` and calls the existing FastAPI scan endpoint.
+1. Open `Level 1 Audit` in Streamlit.
+2. Upload a PNG, JPG, JPEG, or WEBP screenshot.
+3. Select `Analyze screenshot`.
+4. Review findings and download JSON or HTML reports.
 
-Level 2 direction:
-
-- Baseline = before/original/approved screenshot.
-- Current = after/updated/candidate screenshot.
-- If the baseline is defective and current fixes it, the expected classification is improvement.
-- Use the Streamlit swap checkbox if you accidentally selected the images in reverse order.
-
-## Analyze A Screenshot
+API example:
 
 ```bash
 curl -X POST http://localhost:8001/api/v1/analyze -F "file=@C:\path\to\screenshot.png"
 ```
 
-## Compare Before / After Screenshots
+## Level 2: Before/After Comparison
+
+Level 2 compares a baseline screenshot against a current screenshot.
+
+Direction rules:
+
+- Baseline = before, original, or approved screenshot.
+- Current = after, updated, or candidate screenshot.
+- Improvements, regressions, and neutral changes are classified from baseline to current.
+- Use the Streamlit swap option if the images were uploaded in reverse order.
+
+API example:
 
 ```bash
 curl -X POST http://localhost:8001/api/v1/compare ^
@@ -155,69 +198,63 @@ curl -X POST http://localhost:8001/api/v1/compare ^
   -F "current=@C:\path\to\after.png"
 ```
 
-You can also use `http://localhost:8001/ui` to upload files from the browser.
-For the complete UI across all levels, prefer Streamlit at `http://localhost:8501`.
+## Level 3: Autonomous Website Regression Scan
 
-## Run An Autonomous Level 3 Scan
+Level 3 runs a browser-based scan against configured website pages.
 
-First run creates baselines. Later runs compare against them.
+The first run creates baselines. Later runs compare new screenshots against stored baselines.
 
-Level 3 input is website scan configuration, not uploaded screenshots:
+Level 3 supports:
 
-- Website URL, for example `https://your-app.example.com`.
-- At least 3 pages to scan, for example `/dashboard`, `/settings`, `/billing`.
-- Optional login selectors if the site requires auth.
-- Dynamic selectors to ignore, such as timestamps, counters, session banners, avatars.
-- Viewport size and wait time.
+- Website URL input.
+- Three or more page paths.
+- Optional authentication selectors.
+- Viewport width and height settings.
+- Navigation wait timing.
+- Baseline refresh mode.
+- Dynamic selector masking.
 
-First run behavior:
+### First Run Behavior
 
-- Opens the website using Playwright.
-- Logs in if auth is enabled.
-- Visits the configured pages.
+- Launches Chromium through Playwright.
+- Logs in when authentication is configured.
+- Visits each configured page.
 - Captures screenshots.
-- Saves those screenshots as current baselines and immutable baseline versions.
-- Returns `overall_status: baseline_created`.
+- Saves baseline screenshots and baseline metadata.
+- Returns a baseline-created result.
 
-Second and later run behavior:
+### Later Run Behavior
 
 - Captures fresh screenshots.
-- Compares them against the stored baselines.
-- Skips LLM analysis for tiny pixel diffs below `0.5%`.
-- Calls the Level 2 comparison agent only for meaningful visual changes.
+- Compares current screenshots against stored baselines.
+- Skips LLM analysis when pixel difference is below the configured threshold.
+- Calls the comparison agent when meaningful visual changes are detected.
+- Stores scan history and downloadable reports.
 
-If `comparison_report` is `null` in Level 3, it usually means one of these:
+### Example Level 3 Demo Configuration
 
-- The page just created or refreshed a baseline.
-- The page pixel diff was below `0.5%`, so the agent correctly skipped the LLM call.
-- The page capture failed, in which case `error` explains why.
+Use this sample site to demonstrate authentication and multi-page scanning:
 
-To try a different website in Streamlit:
+| Field | Value |
+| --- | --- |
+| Website URL | `https://the-internet.herokuapp.com` |
+| Page 1 | `/secure` as `Authenticated Secure Area` |
+| Page 2 | `/checkboxes` as `Checkboxes` |
+| Page 3 | `/login` as `Login Form` |
+| Login URL | `https://the-internet.herokuapp.com/login` |
+| Username selector | `#username` |
+| Password selector | `#password` |
+| Submit selector | `button[type=submit]` |
+| Success indicator | `.flash.success` |
 
-- Enter the new website URL.
-- Edit the pages table to at least 3 real paths on that site.
-- Use clear report names such as `Home`, `Pricing`, and `Contact`; these become the page IDs.
-- Turn off authentication if the site is public.
-- If auth is needed, provide the login URL and CSS selectors, and set username/password env vars in `.env`.
+Set credentials in `.env`:
 
-The UI uses `body` as the default readiness selector and masks common dynamic
-regions such as `header` and `footer` automatically. Advanced scan configuration
-is still available through `config/scan_config.example.json` for teams that need
-custom wait selectors or dynamic masking rules.
+```env
+SCAN_USERNAME=tomsmith
+SCAN_PASSWORD=SuperSecretPassword!
+```
 
-Example authenticated Level 3 inputs:
-
-- Website URL: `https://the-internet.herokuapp.com`
-- Page 1: `/secure`, report name `Authenticated Secure Area`
-- Page 2: `/checkboxes`, report name `Checkboxes`
-- Page 3: `/login`, report name `Login Form`
-- Auth enabled
-- Login URL: `https://the-internet.herokuapp.com/login`
-- Username selector: `#username`
-- Password selector: `#password`
-- Submit selector: `button[type=submit]`
-- Success indicator: `.flash.success`
-- `.env`: `SCAN_USERNAME=your_test_account_username`, `SCAN_PASSWORD=your_test_account_password`
+Start a scan through the API:
 
 ```bash
 curl -X POST http://localhost:8001/api/v1/scan/start ^
@@ -225,7 +262,7 @@ curl -X POST http://localhost:8001/api/v1/scan/start ^
   -d "{\"config_file\":\"config/scan_config.example.json\",\"refresh_baseline\":false}"
 ```
 
-Refresh all baselines after reviewed changes:
+Refresh baselines after approved UI changes:
 
 ```bash
 curl -X POST http://localhost:8001/api/v1/scan/baseline/refresh ^
@@ -235,109 +272,95 @@ curl -X POST http://localhost:8001/api/v1/scan/baseline/refresh ^
 
 Useful Level 3 endpoints:
 
-- `POST /api/v1/scan/start`
-- `GET /api/v1/scan/baselines`
-- `POST /api/v1/scan/baseline/refresh`
-- `GET /api/v1/scan/history`
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| POST | `/api/v1/scan/start` | Run a website scan. |
+| GET | `/api/v1/scan/baselines` | List stored baselines. |
+| POST | `/api/v1/scan/baseline/refresh` | Refresh one or all baselines. |
+| GET | `/api/v1/scan/history` | View recent scan history. |
 
-For Level 3, website URLs are accepted through the scan config. The Streamlit UI makes that config from user input, so non-technical users do not need to hand-write JSON.
+## Reports And Output
 
-## Output
+Generated artifacts are written to `output/`.
 
-- JSON report: `output/audit_{report_id}.json`
-- HTML report: `output/audit_{report_id}.html`
-- Level 2 JSON report: `output/diff_{report_id}.json`
-- Level 2 HTML report: `output/diff_{report_id}.html`
-- Level 3 scan reports: `output/scans/SCAN-*.json` and `output/scans/SCAN-*.html`
-- Level 3 baselines: `output/baselines/{page_id}.png` and `output/baselines/baselines.db`
-- Structured JSON response from `POST /api/v1/analyze`
-- Structured JSON response from `POST /api/v1/compare`
-- `decision_trace` records observable execution decisions such as image validation, LLM attempt limit, validation result, and report writing.
-- `llm_attempts` records the exact number of LLM calls made.
+| Artifact | Path Pattern |
+| --- | --- |
+| Level 1 JSON report | `output/audit_*.json` |
+| Level 1 HTML report | `output/audit_*.html` |
+| Level 2 JSON report | `output/diff_*.json` |
+| Level 2 HTML report | `output/diff_*.html` |
+| Level 3 JSON report | `output/scans/SCAN-*.json` |
+| Level 3 HTML report | `output/scans/SCAN-*.html` |
+| Current baselines | `output/baselines/*.png` |
+| Baseline versions | `output/baselines/versions/*.png` |
+| Baseline database | `output/baselines/baselines.db` |
+| Streamlit sessions | `output/ui_sessions/` |
 
-## Guardrails
+Reports include structured findings, summary metrics, LLM attempt counts, and decision traces where applicable.
 
-- One LLM call by default: `ALLOW_LLM_CORRECTION_RETRY=false`.
-- Optional correction retry is capped at two total attempts with `ALLOW_LLM_CORRECTION_RETRY=true` and `LLM_MAX_ATTEMPTS=2`.
-- Image uploads reject unsupported formats, corrupt files, files over `MAX_IMAGE_SIZE_MB`, and images smaller than 100px.
-- LLM output must be valid JSON and match the Pydantic finding schema before a report is produced.
-- Level 2 requires at least 5 validated visual differences before producing a diff report.
-- Level 2 explicitly flags accessibility regressions such as contrast drops, font size reductions, spacing compression, and tap target reductions.
-- Level 3 creates baselines on first run and only calls the LLM when pixel diff is at least `0.5%`.
-- Level 3 masks configured dynamic DOM regions before screenshots and applies a second image-level filter before comparison.
-- Level 3 uses a bounded LLM retry count through `L2_LLM_MAX_ATTEMPTS`, capped by code to prevent loops.
-- Level 3 has a 180-second scan budget for a full scan cycle.
-- Failures return structured `success: false` responses instead of unhandled server errors.
+## Guardrails And Reliability
 
-## Run Tests
+- Uploaded images are validated for format, corruption, file size, and minimum dimensions.
+- LLM responses must pass JSON parsing and Pydantic schema validation.
+- LLM retry behavior is bounded by environment settings and code limits.
+- Level 2 requires enough validated visual differences before producing a comparison report.
+- Level 3 masks configured dynamic DOM selectors before screenshots.
+- Level 3 applies a second image-level filter before pixel comparison.
+- Level 3 skips LLM analysis for insignificant pixel differences.
+- Level 3 scan cycles have a bounded runtime budget.
+- API failures return structured `success: false` responses instead of unhandled errors.
+
+## Testing
+
+Run tests locally:
 
 ```bash
-pytest tests/ -v
+pytest tests/ level1/tests/ level2/tests/ level3/tests/ -v
 ```
 
-## Production Readiness Checklist
+Run tests through Docker:
 
-- Python dependencies are pinned in `requirements.txt`.
-- Docker installs Playwright Chromium and OS browser dependencies, so Level 3 runs on fresh machines.
-- Docker Compose starts both services: `api` on port `8001` and `ui` on port `8501`.
-- Runtime configuration comes from `.env`; secrets are excluded from Docker and git.
-- Docker support is included for repeatable deployment.
-- The service exposes `/api/v1/health` for operational checks.
-- Reports are persisted as JSON and HTML.
-- Guardrails prevent unbounded LLM loops and record `decision_trace` plus `llm_attempts`.
+```bash
+docker compose run --rm api pytest tests/ level1/tests/ level2/tests/ level3/tests/ -v
+```
 
-## Evaluation Alignment
+## Important Files
 
-- **Code quality and architecture:** FastAPI transport (`api/`), agent logic (`core/`), UI (`frontend/`), database boundary (`database/`), schemas, validators, prompts, and report generation are separated.
-- **Real-world complexity:** unsupported images, corrupt uploads, invalid model JSON, auth failure, browser capture failure, missing env credentials, tiny pixel diffs, and dynamic content are handled with explicit errors or skip decisions.
-- **Agentic design thinking:** every report includes `decision_trace`; LLM calls are bounded; Level 3 only calls the model after measurable visual diff evidence.
-- **Completeness:** Levels 1, 2, and 3 produce structured JSON plus human-readable HTML reports and have Streamlit workflows for non-technical users.
-- **Production readiness:** Docker, `.env.example`, health checks, tests, SQLite baseline persistence, versioned baselines, and package entrypoints are included.
+| File | Purpose |
+| --- | --- |
+| `main.py` | FastAPI startup, lifespan initialization, and router registration. |
+| `backend/app.py` | Deployable FastAPI app export. |
+| `frontend/streamlit_app.py` | Streamlit UI for all workflows. |
+| `streamlit_app.py` | Backward-compatible Streamlit launcher. |
+| `core/llm_client.py` | Groq vision model wrapper. |
+| `core/report_generator.py` | JSON and HTML report generation. |
+| `level1/api/routes.py` | Level 1 API route. |
+| `level2/api/routes_l2.py` | Level 2 API route. |
+| `level3/api/routes_l3.py` | Level 3 API routes. |
+| `level3/core/browser.py` | Playwright browser automation. |
+| `level3/core/baseline_store.py` | SQLite baseline and scan history storage. |
+| `level3/core/dynamic_filter.py` | Image-level dynamic filtering and pixel diff. |
+| `level3/core/scan_engine.py` | Level 3 scan orchestration. |
+| `utils/image_utils.py` | Image loading, validation, resizing, and encoding. |
+| `utils/logger.py` | Structured JSON logging. |
 
-## Architecture
+## Production Readiness
 
-Organized workflow:
+- Docker image includes runtime dependencies for FastAPI, Streamlit, Playwright, and Chromium.
+- Docker Compose starts API and UI services with health checks and persistent volumes.
+- Runtime configuration is externalized through `.env`.
+- `.env.example` documents required and optional environment variables.
+- Generated artifacts are persisted outside containers in `output/`.
+- SQLite baseline metadata and versioned baseline files support repeatable regression review.
+- API documentation is available through OpenAPI at `/docs`.
+- Tests cover shared utilities and level-specific contracts.
 
-- `frontend/`: Streamlit UI entrypoint.
-- `backend/`: FastAPI package entrypoint and backend documentation.
-- `agent/`: agent-code package boundary and documentation.
-- `database/`: SQLite database package boundary and documentation.
-- `api/`: FastAPI route implementations.
-- `core/`: actual agent logic and schemas.
-- `utils/`: shared backend utilities.
-- `output/`: generated reports, screenshots, baselines, and SQLite DB.
+## Evaluation Notes
 
-Important files:
+This project is structured to demonstrate three levels of AI-assisted design review:
 
-- `main.py`: FastAPI app startup
-- `Dockerfile`: portable runtime image with FastAPI, Streamlit, Playwright, and Chromium
-- `docker-compose.yml`: starts the API and Streamlit UI together
-- `streamlit_app.py`: backward-compatible root Streamlit launcher
-- `frontend/streamlit_app.py`: Streamlit UI entrypoint for all levels
-- `backend/app.py`: deployable FastAPI app export
-- `api/routes.py`: Level 1 endpoint
-- `api/routes_l2.py`: Level 2 endpoint
-- `api/routes_l3.py`: Level 3 endpoints
-- `core/schemas.py`: Pydantic contracts shared by future levels
-- `core/schemas_l2.py`: Level 2 comparison contracts
-- `core/schemas_l3.py`: Level 3 scan contracts
-- `core/prompt_builder.py`: Level 1 prompt construction
-- `core/prompt_builder_l2.py`: Level 2 comparison prompt construction
-- `core/prompt_builder_l3.py`: Level 3 regression context prompt
-- `core/browser.py`: Playwright browser automation
-- `core/baseline_store.py`: SQLite baseline and scan history store
-- `core/dynamic_filter.py`: image-level dynamic content filtering and pixel diff
-- `core/scan_engine.py`: Level 3 scan orchestration
-- `core/llm_client.py`: Groq vision wrapper
-- `core/validator.py`: LLM JSON parsing and validation
-- `core/report_generator.py`: JSON and HTML report generation
-- `utils/image_utils.py`: Image loading, validation, resizing, encoding
-- `utils/logger.py`: Structured JSON logging
+- Level 1 shows focused visual audit reasoning on a single screenshot.
+- Level 2 shows comparative design reasoning with regression and improvement classification.
+- Level 3 shows autonomous scan orchestration, browser interaction, baseline persistence, dynamic masking, and selective model invocation.
 
-Database:
-
-- The database is SQLite.
-- Default DB file: `output/baselines/baselines.db`.
-- It stores Level 3 baseline metadata and scan history.
-- Baseline screenshots are stored as PNG files in `output/baselines/`.
-- Immutable baseline history is stored in `output/baselines/versions/`.
+The system is designed to make AI decisions observable through structured reports, decision traces, bounded model calls, and downloadable artifacts.

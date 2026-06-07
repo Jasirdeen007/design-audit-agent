@@ -10,10 +10,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-from api.routes import router, set_llm_client
-from api.routes_l2 import router_l2, set_llm_client_l2
-from api.routes_l3 import router_l3, set_llm_client_l3
-from core.baseline_store import baseline_store
+from level1.api.routes import router, set_llm_client
+from level2.api.routes_l2 import router_l2, set_llm_client_l2
+from level3.api.routes_l3 import router_l3, set_llm_client_l3
+from level3.core.baseline_store import baseline_store
 from core.llm_client import LLMClient
 from utils.logger import get_logger
 

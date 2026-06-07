@@ -7,9 +7,9 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from core.schemas import AuditReport
-from core.schemas_l2 import DiffReport
-from core.schemas_l3 import ScanReport
+from level1.core.schemas import AuditReport
+from level2.core.schemas_l2 import DiffReport
+from level3.core.schemas_l3 import ScanReport
 
 
 def save_json_report(report: AuditReport, output_dir: str = "output") -> str:
@@ -27,7 +27,7 @@ def save_json_report(report: AuditReport, output_dir: str = "output") -> str:
 def save_html_report(report: AuditReport, output_dir: str = "output") -> str:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    template_dir = Path(__file__).resolve().parents[1] / "templates"
+    template_dir = Path(__file__).resolve().parents[1] / "level1" / "templates"
     env = Environment(
         loader=FileSystemLoader(template_dir),
         autoescape=select_autoescape(["html", "xml"]),
@@ -54,7 +54,7 @@ def save_diff_report_json(report: DiffReport, output_dir: str = "output") -> str
 def save_diff_report_html(report: DiffReport, output_dir: str = "output") -> str:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    template_dir = Path(__file__).resolve().parents[1] / "templates"
+    template_dir = Path(__file__).resolve().parents[1] / "level2" / "templates"
     env = Environment(
         loader=FileSystemLoader(template_dir),
         autoescape=select_autoescape(["html", "xml"]),
@@ -81,7 +81,7 @@ def save_scan_report_json(report: ScanReport, output_dir: str = "output/scans") 
 def save_scan_report_html(report: ScanReport, output_dir: str = "output/scans") -> str:
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    template_dir = Path(__file__).resolve().parents[1] / "templates"
+    template_dir = Path(__file__).resolve().parents[1] / "level3" / "templates"
     env = Environment(
         loader=FileSystemLoader(template_dir),
         autoescape=select_autoescape(["html", "xml"]),
