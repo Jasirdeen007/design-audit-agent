@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
@@ -48,9 +49,9 @@ def api_url(api_base: str, endpoint: str) -> str:
 
 
 def get_ui_session_id() -> str:
-    if "ui_session_id" in st.session_state:
-        return st.session_state["ui_session_id"]
     session_id = st.query_params.get("session") or f"UI-{uuid.uuid4().hex[:10].upper()}"
+    if "ui_session_id" in st.session_state and st.session_state["ui_session_id"] == session_id:
+        return st.session_state["ui_session_id"]
     st.session_state["ui_session_id"] = session_id
     st.query_params["session"] = session_id
     return session_id
@@ -64,6 +65,10 @@ def session_path(*parts: str) -> Path:
     for part in parts:
         path /= part
     return path
+
+
+def widget_key(name: str) -> str:
+    return f"{UI_SESSION_ID}_{name}"
 
 
 def safe_filename(value: str) -> str:
@@ -128,10 +133,24 @@ def show_thumbnail(metadata: dict, caption: str | None = None) -> None:
     st.image(upload_bytes(metadata), caption=caption or metadata["name"], width=220)
 
 
+def clear_ui_session(session_id: str) -> None:
+    base_dir = SESSION_DIR.resolve()
+    target = (SESSION_DIR / session_id).resolve()
+    try:
+        target.relative_to(base_dir)
+    except ValueError:
+        return
+    if target.exists():
+        shutil.rmtree(target)
+
+
 def start_new_ui_session() -> None:
+    old_session_id = st.session_state.get("ui_session_id") or st.query_params.get("session") or UI_SESSION_ID
+    clear_ui_session(str(old_session_id))
     session_id = f"UI-{uuid.uuid4().hex[:10].upper()}"
     st.session_state.clear()
     st.session_state["ui_session_id"] = session_id
+    st.query_params.clear()
     st.query_params["session"] = session_id
     st.rerun()
 
@@ -213,7 +232,7 @@ def show_error_response(result: dict) -> bool:
 
 def render_l1(api_base: str) -> None:
     st.header("Level 1: Single Screenshot Audit")
-    image = st.file_uploader("Screenshot", type=["png", "jpg", "jpeg", "webp"], key="l1_upload")
+    image = st.file_uploader("Screenshot", type=["png", "jpg", "jpeg", "webp"], key=widget_key("l1_upload"))
     image_meta = persist_upload("l1_screenshot", image, clear_keys=["l1_report"])
     if image_meta:
         show_thumbnail(image_meta)
@@ -247,9 +266,9 @@ def render_l2(api_base: str) -> None:
     st.header("Level 2: Before / After Comparison")
     st.caption("Baseline = before/original. Current = after/updated.")
     col_a, col_b = st.columns(2)
-    baseline = col_a.file_uploader("Baseline screenshot", type=["png", "jpg", "jpeg", "webp"], key="baseline")
-    current = col_b.file_uploader("Current screenshot", type=["png", "jpg", "jpeg", "webp"], key="current")
-    swap = st.checkbox("Swap baseline and current before comparing")
+    baseline = col_a.file_uploader("Baseline screenshot", type=["png", "jpg", "jpeg", "webp"], key=widget_key("baseline"))
+    current = col_b.file_uploader("Current screenshot", type=["png", "jpg", "jpeg", "webp"], key=widget_key("current"))
+    swap = st.checkbox("Swap baseline and current before comparing", key=widget_key("swap_l2_images"))
     baseline_meta = persist_upload("l2_baseline", baseline, clear_keys=["l2_report"])
     current_meta = persist_upload("l2_current", current, clear_keys=["l2_report"])
     if baseline_meta:
@@ -350,7 +369,7 @@ def default_pages_for_url(target_url: str) -> list[dict]:
 def render_l3(api_base: str) -> None:
     st.header("Level 3: Autonomous Website Regression Scan")
     saved_target_url = get_session_value("l3_target_url") or "https://the-internet.herokuapp.com"
-    target_url = st.text_input("Website URL", saved_target_url)
+    target_url = st.text_input("Website URL", saved_target_url, key=widget_key("l3_target_url_input"))
     is_demo_site = "the-internet.herokuapp.com" in urlparse(target_url).netloc
     st.subheader("Pages")
     page_rows = st.data_editor(
@@ -361,31 +380,31 @@ def render_l3(api_base: str) -> None:
             "url": st.column_config.TextColumn("URL/path", required=True, help="Relative path like /pricing or a full URL."),
             "name": st.column_config.TextColumn("Report name", help="Human-readable page name shown in reports."),
         },
-        key=f"l3-pages-{slug(target_url)}",
+        key=widget_key(f"l3_pages_{slug(target_url)}"),
     )
     pages = rows_to_pages(page_rows, target_url)
 
     with st.expander("Authentication", expanded=is_demo_site):
-        use_auth = st.checkbox("Website requires login", value=is_demo_site)
+        use_auth = st.checkbox("Website requires login", value=is_demo_site, key=widget_key("l3_use_auth"))
         login_url = username_selector = password_selector = submit_selector = success_indicator = ""
         username_env = "SCAN_USERNAME"
         password_env = "SCAN_PASSWORD"
         if use_auth:
             col1, col2 = st.columns(2)
-            login_url = col1.text_input("Login URL", "https://the-internet.herokuapp.com/login" if is_demo_site else "")
-            success_indicator = col2.text_input("Success indicator", ".flash.success" if is_demo_site else "body")
-            username_selector = col1.text_input("Username selector", "#username" if is_demo_site else "")
-            password_selector = col2.text_input("Password selector", "#password" if is_demo_site else "")
-            submit_selector = col1.text_input("Submit selector", "button[type=submit]" if is_demo_site else "")
-            username_env = col1.text_input("Username env var", "SCAN_USERNAME")
-            password_env = col2.text_input("Password env var", "SCAN_PASSWORD")
+            login_url = col1.text_input("Login URL", "https://the-internet.herokuapp.com/login" if is_demo_site else "", key=widget_key("l3_login_url"))
+            success_indicator = col2.text_input("Success indicator", ".flash.success" if is_demo_site else "body", key=widget_key("l3_success_indicator"))
+            username_selector = col1.text_input("Username selector", "#username" if is_demo_site else "", key=widget_key("l3_username_selector"))
+            password_selector = col2.text_input("Password selector", "#password" if is_demo_site else "", key=widget_key("l3_password_selector"))
+            submit_selector = col1.text_input("Submit selector", "button[type=submit]" if is_demo_site else "", key=widget_key("l3_submit_selector"))
+            username_env = col1.text_input("Username env var", "SCAN_USERNAME", key=widget_key("l3_username_env"))
+            password_env = col2.text_input("Password env var", "SCAN_PASSWORD", key=widget_key("l3_password_env"))
 
     with st.expander("Scan settings"):
         c1, c2, c3 = st.columns(3)
-        viewport_width = c1.number_input("Viewport width", 320, 3840, 1440, step=10)
-        viewport_height = c2.number_input("Viewport height", 320, 2160, 900, step=10)
-        wait_ms = c3.number_input("Wait after navigation ms", 0, 10000, 1500, step=100)
-        refresh_baseline = st.checkbox("Refresh baselines instead of comparing")
+        viewport_width = c1.number_input("Viewport width", 320, 3840, 1440, step=10, key=widget_key("l3_viewport_width"))
+        viewport_height = c2.number_input("Viewport height", 320, 2160, 900, step=10, key=widget_key("l3_viewport_height"))
+        wait_ms = c3.number_input("Wait after navigation ms", 0, 10000, 1500, step=100, key=widget_key("l3_wait_ms"))
+        refresh_baseline = st.checkbox("Refresh baselines instead of comparing", key=widget_key("l3_refresh_baseline"))
 
     config = {
         "target_url": target_url,
@@ -470,8 +489,8 @@ with st.sidebar:
     st.caption(f"Session: {UI_SESSION_ID}")
     if st.button("Start new session", type="secondary"):
         start_new_ui_session()
-    api_base = st.text_input("FastAPI URL", DEFAULT_API_BASE)
-    page = st.radio("Workflow", ["Level 1 Audit", "Level 2 Compare", "Level 3 Website Scan", "Baselines", "History"])
+    api_base = st.text_input("FastAPI URL", DEFAULT_API_BASE, key=widget_key("api_base"))
+    page = st.radio("Workflow", ["Level 1 Audit", "Level 2 Compare", "Level 3 Website Scan", "Baselines", "History"], key=widget_key("workflow"))
     if st.button("Check API"):
         try:
             health = get_json(api_base, "/api/v1/health")
@@ -490,3 +509,6 @@ elif page == "Baselines":
     render_baselines(api_base)
 else:
     render_history(api_base)
+
+
+
