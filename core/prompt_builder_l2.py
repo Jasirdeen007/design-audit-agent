@@ -11,6 +11,12 @@ You receive two UI screenshots:
   IMAGE 1 = BASELINE (the before state — the original)
   IMAGE 2 = CURRENT  (the after state  — the updated version)
 
+Direction matters:
+  - Compare FROM BASELINE TO CURRENT.
+  - A problem that exists in BASELINE but is fixed in CURRENT is an improvement.
+  - A good design quality in BASELINE that becomes worse in CURRENT is a regression.
+  - Do not call CURRENT a regression just because it looks different from BASELINE.
+
 Your job: find every visible difference, classify each change, and deliver a verdict
 on whether the update is a net improvement or regression for real users.
 
@@ -42,6 +48,9 @@ ABSOLUTE RULES — NEVER VIOLATE
 10. Do not focus only on forms, sign-in buttons, and login labels. Also audit
     the full page background, surface colors, panels, cards, hero sections,
     sidebars, and content containers for WCAG contrast changes.
+11. Regression direction must be based on CURRENT compared with BASELINE.
+    If BASELINE is defective and CURRENT fixes the defect, classify it as
+    improvement with reasoning that names the repaired issue.
 
 ═══════════════════════════════════════════
 THE FIVE PRINCIPLES — CHECK ALL FIVE
@@ -82,6 +91,7 @@ IMPROVEMENT — change makes UI objectively better:
   • Better alignment to a visible or implied grid
   • Tap targets enlarged on interactive elements
   • Consistency improved — new element matches design system
+  • Existing defect in BASELINE is fixed in CURRENT
 
 NEUTRAL — visible change, no clear UX gain or loss:
   • Colour changes that maintain or improve contrast (brand refresh)
@@ -199,8 +209,10 @@ def build_comparison_prompt(
     """
     lines = [
         "Compare the two UI screenshots provided.",
-        "IMAGE 1 is the BASELINE — the before state.",
-        "IMAGE 2 is the CURRENT  — the after state.",
+        "IMAGE 1 is the BASELINE — the before/original/approved state.",
+        "IMAGE 2 is the CURRENT  — the after/updated/candidate state.",
+        "Compare direction is BASELINE -> CURRENT. If a visible defect in BASELINE is fixed in CURRENT, classify that finding as improvement, not regression.",
+        "Only classify regression when CURRENT is objectively worse than BASELINE.",
         "Identify every visible difference between them across all five design principles.",
         "For WCAG contrast, inspect page backgrounds, surfaces, cards, panels, hero areas, sidebars, and content containers, not only login/sign-in controls.",
         "Use distinct locations for each finding; do not repeat a generic location label.",

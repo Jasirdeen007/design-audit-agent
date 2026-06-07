@@ -47,12 +47,14 @@ def load_and_validate_image(
 
     metadata = {
         "image_filename": filename,
+        "filename": filename,
         "format": image.format,
         "resolution": f"{width}x{height}",
         "size_mb": round(size_mb, 2),
         "mode": image.mode,
     }
-    logger.info("Image validated successfully", extra=metadata)
+    log_metadata = {key: value for key, value in metadata.items() if key != "filename"}
+    logger.info("Image validated successfully", extra=log_metadata)
     return image, metadata
 
 

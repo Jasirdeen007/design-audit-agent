@@ -17,6 +17,14 @@ def test_build_comparison_prompt_labels_images():
     assert "at least 5" in prompt
 
 
+def test_l2_prompt_enforces_baseline_to_current_direction():
+    prompt = build_comparison_prompt()
+    assert "BASELINE -> CURRENT" in prompt
+    assert "fixed in CURRENT" in prompt
+    assert "improvement, not regression" in prompt
+    assert "Regression direction must be based on CURRENT compared with BASELINE" in SYSTEM_PROMPT_L2
+
+
 def test_l2_prompt_mentions_background_surface_wcag_checks():
     prompt = build_comparison_prompt(
         {"resolution": "800x600", "format": "PNG"},

@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 output/*
 !output/.gitkeep
+config/generated_scan_config.json
 *.egg-info/
 dist/
 build/
