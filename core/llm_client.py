@@ -39,8 +39,28 @@ class LLMClient:
     ) -> str:
         return self._call_groq(system_prompt, user_prompt, image_base64, image_format)
 
+    def analyze_two_images(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        image_base64_1: str,
+        image_format_1: str,
+        image_base64_2: str,
+        image_format_2: str,
+    ) -> str:
+        mime1 = self._mime_type(image_format_1)
+        mime2 = self._mime_type(image_format_2)
+        return self._call_groq_two_images(
+            system_prompt,
+            user_prompt,
+            image_base64_1,
+            mime1,
+            image_base64_2,
+            mime2,
+        )
+
     def _call_groq(self, system_prompt: str, user_prompt: str, image_base64: str, image_format: str) -> str:
-        mime_type = f"image/{'jpeg' if image_format == 'JPEG' else image_format.lower()}"
+        mime_type = self._mime_type(image_format)
         try:
             response = self._client.chat.completions.create(
                 model=self.model,
@@ -67,3 +87,42 @@ class LLMClient:
             return content
         except Exception as exc:
             raise RuntimeError(f"Groq request failed: {exc}") from exc
+
+    @staticmethod
+    def _mime_type(image_format: str) -> str:
+        mime_map = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
+        return mime_map.get(image_format.upper(), "image/png")
+
+    def _call_groq_two_images(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        b64_1: str,
+        mime1: str,
+        b64_2: str,
+        mime2: str,
+    ) -> str:
+        try:
+            response = self._client.chat.completions.create(
+                model=self.model,
+                temperature=0.1,
+                max_tokens=self.max_tokens,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": user_prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:{mime1};base64,{b64_1}"}},
+                            {"type": "image_url", "image_url": {"url": f"data:{mime2};base64,{b64_2}"}},
+                        ],
+                    },
+                ],
+            )
+            content = response.choices[0].message.content
+            if not content:
+                raise RuntimeError("Groq returned an empty two-image response.")
+            return content
+        except Exception as exc:
+            raise RuntimeError(f"Groq two-image request failed: {exc}") from exc

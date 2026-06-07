@@ -7,6 +7,8 @@ import os
 
 DEFAULT_MAX_LLM_ATTEMPTS = 1
 MAX_ALLOWED_LLM_ATTEMPTS = 2
+DEFAULT_MAX_L2_LLM_ATTEMPTS = 2
+MAX_ALLOWED_L2_LLM_ATTEMPTS = 3
 
 
 def parse_positive_int(value: str | None, default: int, maximum: int) -> int:
@@ -36,6 +38,15 @@ def get_max_llm_attempts() -> int:
         os.getenv("LLM_MAX_ATTEMPTS"),
         default=DEFAULT_MAX_LLM_ATTEMPTS,
         maximum=MAX_ALLOWED_LLM_ATTEMPTS,
+    )
+
+
+def get_max_l2_llm_attempts() -> int:
+    """Level 2 is harder: allow bounded correction by default, never unbounded loops."""
+    return parse_positive_int(
+        os.getenv("L2_LLM_MAX_ATTEMPTS"),
+        default=DEFAULT_MAX_L2_LLM_ATTEMPTS,
+        maximum=MAX_ALLOWED_L2_LLM_ATTEMPTS,
     )
 
 
